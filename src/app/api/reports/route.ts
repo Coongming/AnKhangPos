@@ -1,0 +1,182 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type') || 'revenue'; // revenue, profit, debt, stock
+    const period = searchParams.get('period') || 'month'; // day, week, month, year, custom
+    const dateFrom = searchParams.get('dateFrom') || '';
+    const dateTo = searchParams.get('dateTo') || '';
+
+    // Calculate date range
+    let startDate = new Date();
+    let endDate = new Date();
+
+    if (dateFrom && dateTo) {
+      startDate = new Date(dateFrom);
+      endDate = new Date(dateTo);
+      endDate.setDate(endDate.getDate() + 1);
+    } else {
+      const now = new Date();
+      switch (period) {
+        case 'day':
+          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+          endDate = new Date(startDate);
+          endDate.setDate(endDate.getDate() + 1);
+          break;
+        case 'week':
+          startDate = new Date(now);
+          startDate.setDate(now.getDate() - 7);
+          endDate = new Date(now);
+          endDate.setDate(endDate.getDate() + 1);
+          break;
+        case 'month':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+          break;
+        case 'year':
+          startDate = new Date(now.getFullYear(), 0, 1);
+          endDate = new Date(now.getFullYear() + 1, 0, 1);
+          break;
+      }
+    }
+
+    if (type === 'revenue') {
+      const sales = await prisma.sale.findMany({
+        where: {
+          saleDate: { gte: startDate, lt: endDate },
+          status: 'completed',
+        },
+        orderBy: { saleDate: 'asc' },
+      });
+
+      const totalRevenue = sales.reduce((sum, s) => sum + s.totalAmount, 0);
+      const totalCost = sales.reduce((sum, s) => sum + s.totalCost, 0);
+      const totalOrders = sales.length;
+      const cashRevenue = sales.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + s.totalAmount, 0);
+      const transferRevenue = sales.filter(s => s.paymentMethod === 'transfer').reduce((sum, s) => sum + s.totalAmount, 0);
+
+      // Group by date
+      const dailyData: Record<string, { date: string; revenue: number; orders: number; cashRevenue: number; transferRevenue: number }> = {};
+      sales.forEach((s) => {
+        const dateKey = s.saleDate.toISOString().split('T')[0];
+        if (!dailyData[dateKey]) dailyData[dateKey] = { date: dateKey, revenue: 0, orders: 0, cashRevenue: 0, transferRevenue: 0 };
+        dailyData[dateKey].revenue += s.totalAmount;
+        dailyData[dateKey].orders += 1;
+        if (s.paymentMethod === 'cash') dailyData[dateKey].cashRevenue += s.totalAmount;
+        else if (s.paymentMethod === 'transfer') dailyData[dateKey].transferRevenue += s.totalAmount;
+      });
+
+      return NextResponse.json({
+        totalRevenue,
+        totalCost,
+        totalOrders,
+        grossProfit: totalRevenue - totalCost,
+        cashRevenue,
+        transferRevenue,
+        dailyData: Object.values(dailyData),
+      });
+    }
+
+    if (type === 'profit') {
+      const sales = await prisma.sale.findMany({
+        where: { saleDate: { gte: startDate, lt: endDate }, status: 'completed' },
+      });
+      const expenses = await prisma.expense.findMany({
+        where: { date: { gte: startDate, lt: endDate } },
+        include: { category: true },
+      });
+
+      const totalRevenue = sales.reduce((sum, s) => sum + s.totalAmount, 0);
+      const totalCost = sales.reduce((sum, s) => sum + s.totalCost, 0);
+      const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
+      const grossProfit = totalRevenue - totalCost;
+      const netProfit = grossProfit - totalExpenses;
+
+      // Expense by category
+      const expenseByCategory: Record<string, number> = {};
+      expenses.forEach((e) => {
+        const cat = e.category.name;
+        expenseByCategory[cat] = (expenseByCategory[cat] || 0) + e.amount;
+      });
+
+      return NextResponse.json({
+        totalRevenue,
+        totalCost,
+        totalExpenses,
+        grossProfit,
+        netProfit,
+        expenseByCategory: Object.entries(expenseByCategory).map(([name, amount]) => ({ name, amount })),
+      });
+    }
+
+    if (type === 'debt') {
+      const customersWithDebt = await prisma.customer.findMany({
+        where: { debt: { gt: 0 } },
+        select: { id: true, code: true, name: true, phone: true, debt: true },
+        orderBy: { debt: 'desc' },
+      });
+      const suppliersWithDebt = await prisma.supplier.findMany({
+        where: { debt: { gt: 0 } },
+        select: { id: true, code: true, name: true, phone: true, debt: true },
+        orderBy: { debt: 'desc' },
+      });
+
+      const totalCustomerDebt = customersWithDebt.reduce((sum, c) => sum + c.debt, 0);
+      const totalSupplierDebt = suppliersWithDebt.reduce((sum, s) => sum + s.debt, 0);
+
+      return NextResponse.json({
+        totalCustomerDebt,
+        totalSupplierDebt,
+        customers: customersWithDebt,
+        suppliers: suppliersWithDebt,
+      });
+    }
+
+    if (type === 'stock') {
+      const products = await prisma.product.findMany({
+        where: { isActive: true },
+        select: {
+          id: true, code: true, name: true, unit: true,
+          stock: true, minStock: true, costPrice: true, salePrice: true,
+          category: { select: { name: true } },
+        },
+        orderBy: { stock: 'asc' },
+      });
+
+      // Best/worst sellers
+      const salesItems = await prisma.saleItem.findMany({
+        where: {
+          sale: { saleDate: { gte: startDate, lt: endDate }, status: 'completed' },
+        },
+        include: { product: { select: { name: true, unit: true } } },
+      });
+
+      const salesByProduct: Record<string, { name: string; unit: string; totalQty: number; totalRevenue: number }> = {};
+      salesItems.forEach((item) => {
+        if (!salesByProduct[item.productId]) {
+          salesByProduct[item.productId] = { name: item.product.name, unit: item.product.unit, totalQty: 0, totalRevenue: 0 };
+        }
+        salesByProduct[item.productId].totalQty += item.quantity;
+        salesByProduct[item.productId].totalRevenue += item.totalPrice;
+      });
+
+      const sortedBySales = Object.values(salesByProduct).sort((a, b) => b.totalQty - a.totalQty);
+      const totalStockValue = products.reduce((sum, p) => sum + p.stock * p.costPrice, 0);
+
+      return NextResponse.json({
+        products,
+        totalStockValue,
+        bestSellers: sortedBySales.slice(0, 10),
+        worstSellers: sortedBySales.slice(-10).reverse(),
+        lowStock: products.filter((p) => p.stock <= p.minStock && p.minStock > 0),
+      });
+    }
+
+    return NextResponse.json({ error: 'Loại báo cáo không hợp lệ' }, { status: 400 });
+  } catch (error) {
+    console.error('Reports error:', error);
+    return NextResponse.json({ error: 'Lỗi tạo báo cáo' }, { status: 500 });
+  }
+}
