@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getStartOfDayVN, getEndOfDayVN } from '@/lib/utils';
 
 export async function GET() {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const today = getStartOfDayVN();
+    const tomorrow = getEndOfDayVN();
 
     // Today's sales
     const todaySales = await prisma.sale.findMany({

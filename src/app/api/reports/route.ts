@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getStartOfDayVN, getEndOfDayVN, getStartOfWeekVN, getStartOfMonthVN, getStartOfYearVN } from '@/lib/utils';
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,36 +10,35 @@ export async function GET(request: NextRequest) {
     const dateFrom = searchParams.get('dateFrom') || '';
     const dateTo = searchParams.get('dateTo') || '';
 
-    // Calculate date range
-    let startDate = new Date();
-    let endDate = new Date();
+    // Calculate date range (Vietnam timezone)
+    let startDate: Date;
+    let endDate: Date;
 
     if (dateFrom && dateTo) {
       startDate = new Date(dateFrom);
       endDate = new Date(dateTo);
       endDate.setDate(endDate.getDate() + 1);
     } else {
-      const now = new Date();
       switch (period) {
         case 'day':
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          endDate = new Date(startDate);
-          endDate.setDate(endDate.getDate() + 1);
+          startDate = getStartOfDayVN();
+          endDate = getEndOfDayVN();
           break;
         case 'week':
-          startDate = new Date(now);
-          startDate.setDate(now.getDate() - 7);
-          endDate = new Date(now);
-          endDate.setDate(endDate.getDate() + 1);
+          startDate = getStartOfWeekVN();
+          endDate = getEndOfDayVN();
           break;
         case 'month':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+          startDate = getStartOfMonthVN();
+          endDate = getEndOfDayVN();
           break;
         case 'year':
-          startDate = new Date(now.getFullYear(), 0, 1);
-          endDate = new Date(now.getFullYear() + 1, 0, 1);
+          startDate = getStartOfYearVN();
+          endDate = getEndOfDayVN();
           break;
+        default:
+          startDate = getStartOfMonthVN();
+          endDate = getEndOfDayVN();
       }
     }
 

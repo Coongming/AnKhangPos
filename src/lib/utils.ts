@@ -50,3 +50,43 @@ export function calculateWeightedAvgCost(
     (currentStock + newQuantity)
   );
 }
+
+// Vietnam timezone helpers (UTC+7) - dùng cho server-side
+const VN_OFFSET = 7 * 60 * 60 * 1000; // 7 hours in ms
+
+export function getStartOfDayVN(date?: Date): Date {
+  const d = date ? new Date(date) : new Date();
+  // Get VN local time
+  const vnTime = new Date(d.getTime() + VN_OFFSET);
+  // Reset to midnight VN
+  vnTime.setUTCHours(0, 0, 0, 0);
+  // Convert back to UTC
+  return new Date(vnTime.getTime() - VN_OFFSET);
+}
+
+export function getEndOfDayVN(date?: Date): Date {
+  const start = getStartOfDayVN(date);
+  return new Date(start.getTime() + 24 * 60 * 60 * 1000);
+}
+
+export function getStartOfWeekVN(): Date {
+  const now = new Date();
+  const start = getStartOfDayVN(now);
+  return new Date(start.getTime() - 7 * 24 * 60 * 60 * 1000);
+}
+
+export function getStartOfMonthVN(): Date {
+  const now = new Date();
+  const vnTime = new Date(now.getTime() + VN_OFFSET);
+  vnTime.setUTCDate(1);
+  vnTime.setUTCHours(0, 0, 0, 0);
+  return new Date(vnTime.getTime() - VN_OFFSET);
+}
+
+export function getStartOfYearVN(): Date {
+  const now = new Date();
+  const vnTime = new Date(now.getTime() + VN_OFFSET);
+  vnTime.setUTCMonth(0, 1);
+  vnTime.setUTCHours(0, 0, 0, 0);
+  return new Date(vnTime.getTime() - VN_OFFSET);
+}
