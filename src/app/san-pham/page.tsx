@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Plus, Search, Package, Edit2, Lock, Unlock, Filter } from 'lucide-react';
+import { Plus, Search, Package, Edit2, Lock, Unlock, Filter, Settings, Trash2, Check, X } from 'lucide-react';
 import { useToast } from '@/components/Toast';
 import { formatCurrency, formatNumber } from '@/lib/utils';
 
@@ -23,6 +23,7 @@ interface Product {
 interface Category {
   id: string;
   name: string;
+  _count?: { products: number };
 }
 
 export default function ProductsPage() {
@@ -35,6 +36,10 @@ export default function ProductsPage() {
   const [filterStatus, setFilterStatus] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [editCategoryId, setEditCategoryId] = useState<string | null>(null);
+  const [editCategoryName, setEditCategoryName] = useState('');
   const [form, setForm] = useState({
     name: '',
     categoryId: '',
@@ -158,6 +163,40 @@ export default function ProductsPage() {
     }
   };
 
+  const handleAddCategory = async () => {
+    if (!newCategoryName.trim()) { showToast('error', 'Vui lòng nhập tên nhóm'); return; }
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: newCategoryName.trim() }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      showToast('success', 'Đã thêm nhóm sản phẩm');
+      setNewCategoryName(''); fetchCategories();
+    } catch (err) { showToast('error', err instanceof Error ? err.message : 'Lỗi'); }
+  };
+
+  const handleEditCategory = async () => {
+    if (!editCategoryId || !editCategoryName.trim()) return;
+    try {
+      const res = await fetch('/api/categories', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: editCategoryId, name: editCategoryName.trim() }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      showToast('success', 'Đã cập nhật nhóm');
+      setEditCategoryId(null); fetchCategories(); fetchProducts();
+    } catch (err) { showToast('error', err instanceof Error ? err.message : 'Lỗi'); }
+  };
+
+  const handleDeleteCategory = async (cat: Category) => {
+    if (!confirm(`Xóa nhóm "${cat.name}"?`)) return;
+    try {
+      const res = await fetch(`/api/categories?id=${cat.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error((await res.json()).error);
+      showToast('success', 'Đã xóa nhóm');
+      fetchCategories();
+    } catch (err) { showToast('error', err instanceof Error ? err.message : 'Lỗi'); }
+  };
+
   return (
     <div>
       <div style={{ marginBottom: 24 }}>
@@ -203,6 +242,9 @@ export default function ProductsPage() {
           </select>
         </div>
         <div className="toolbar-right">
+          <button className="btn btn-ghost" onClick={() => setShowCategoryModal(true)}>
+            <Settings size={16} /> Quản lý nhóm
+          </button>
           <button className="btn btn-primary" onClick={openCreate}>
             <Plus size={16} /> Thêm sản phẩm
           </button>
@@ -381,6 +423,48 @@ export default function ProductsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Category Management Modal */}
+      {showCategoryModal && (
+        <div className="modal-overlay" onClick={() => setShowCategoryModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header"><h3>Quản lý nhóm sản phẩm</h3><button className="modal-close" onClick={() => setShowCategoryModal(false)}>✕</button></div>
+            <div className="modal-body">
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <input className="form-input" placeholder="Tên nhóm mới..." value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleAddCategory()} />
+                <button className="btn btn-primary" onClick={handleAddCategory}><Plus size={16} /> Thêm</button>
+              </div>
+              <div className="table-wrapper">
+                <table className="table"><thead><tr><th>#</th><th>Tên nhóm</th><th className="text-center">Số SP</th><th className="text-center">Thao tác</th></tr></thead>
+                  <tbody>{categories.map((c, i) => (
+                    <tr key={c.id}>
+                      <td className="text-muted">{i + 1}</td>
+                      <td>
+                        {editCategoryId === c.id ? (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <input className="form-input" value={editCategoryName} onChange={(e) => setEditCategoryName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleEditCategory()} autoFocus />
+                            <button className="btn btn-ghost btn-sm text-success" onClick={handleEditCategory}><Check size={14} /></button>
+                            <button className="btn btn-ghost btn-sm" onClick={() => setEditCategoryId(null)}><X size={14} /></button>
+                          </div>
+                        ) : (
+                          <span style={{ fontWeight: 600 }}>{c.name}</span>
+                        )}
+                      </td>
+                      <td className="text-center text-muted">{c._count?.products ?? 0}</td>
+                      <td className="text-center">
+                        <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+                          <button className="btn btn-ghost btn-sm" onClick={() => { setEditCategoryId(c.id); setEditCategoryName(c.name); }} title="Sửa"><Edit2 size={14} /></button>
+                          <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDeleteCategory(c)} title="Xóa"><Trash2 size={14} /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       )}

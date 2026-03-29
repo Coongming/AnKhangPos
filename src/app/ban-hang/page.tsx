@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Search, Trash2, ShoppingCart, User, Plus, Minus, Banknote, CreditCard } from 'lucide-react';
+import { Search, Trash2, ShoppingCart, User, Plus, Minus, Banknote, CreditCard, Truck } from 'lucide-react';
 import { useToast } from '@/components/Toast';
 import { formatCurrency } from '@/lib/utils';
 
 interface Product { id: string; code: string; name: string; unit: string; salePrice: number; costPrice: number; stock: number; category: { name: string }; }
 interface Customer { id: string; code: string; name: string; phone: string | null; debt: number; }
+interface EmployeeItem { id: string; code: string; name: string; isActive: boolean; }
 interface CartItem { productId: string; name: string; unit: string; stock: number; quantity: number; unitPrice: number; discount: number; }
 
 export default function SalesPage() {
@@ -23,15 +24,20 @@ export default function SalesPage() {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer'>('cash');
   const [showCustomerSearch, setShowCustomerSearch] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [employeesList, setEmployeesList] = useState<EmployeeItem[]>([]);
+  const [deliveryEmployeeId, setDeliveryEmployeeId] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
-      const [prodRes, custRes] = await Promise.all([
+      const [prodRes, custRes, empRes] = await Promise.all([
         fetch('/api/products?status=active'),
         fetch('/api/customers'),
+        fetch('/api/employees'),
       ]);
       setProducts(await prodRes.json());
       setCustomers(await custRes.json());
+      const emps = await empRes.json();
+      setEmployeesList(Array.isArray(emps) ? emps.filter((e: EmployeeItem) => e.isActive) : []);
     } catch { showToast('error', 'Lỗi tải dữ liệu'); }
   }, [showToast]);
 
@@ -87,6 +93,7 @@ export default function SalesPage() {
           discount: String(discount),
           notes,
           paymentMethod,
+          deliveryEmployeeId: deliveryEmployeeId || null,
         }),
       });
 
@@ -95,7 +102,7 @@ export default function SalesPage() {
       showToast('success', `Đã tạo hóa đơn ${sale.code}`);
 
       // Reset
-      setCart([]); setSelectedCustomer(null); setOrderDiscount('0'); setPaidAmount(''); setNotes(''); setPaymentMethod('cash');
+      setCart([]); setSelectedCustomer(null); setOrderDiscount('0'); setPaidAmount(''); setNotes(''); setPaymentMethod('cash'); setDeliveryEmployeeId('');
       fetchData();
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Lỗi tạo hóa đơn');
@@ -239,6 +246,18 @@ export default function SalesPage() {
               )}
             </div>
           )}
+        </div>
+
+        {/* Delivery Employee */}
+        <div className="card" style={{ padding: 16 }}>
+          <span style={{ fontWeight: 700, fontSize: 13 }}>
+            <Truck size={14} style={{ display: 'inline', marginRight: 6, verticalAlign: -2 }} />
+            Nhân viên giao
+          </span>
+          <select className="form-select" style={{ marginTop: 8 }} value={deliveryEmployeeId} onChange={(e) => setDeliveryEmployeeId(e.target.value)}>
+            <option value="">Không giao hàng</option>
+            {employeesList.map((e) => <option key={e.id} value={e.id}>{e.code} - {e.name}</option>)}
+          </select>
         </div>
 
         {/* Payment Summary */}

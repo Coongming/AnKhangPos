@@ -11,11 +11,12 @@ datasource db {
 // NHÓM SẢN PHẨM
 // ============================================
 model ProductCategory {
-  id        String    @id @default(cuid())
-  name      String    @unique // Gạo, Nước, Khác
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
-  products  Product[]
+  id           String    @id @default(cuid())
+  name         String    @unique // Gạo, Nước, Khác
+  deliveryRate Float     @default(0) @map("delivery_rate") // Giá ship/đơn vị (VNĐ)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  products     Product[]
 
   @@map("product_categories")
 }
@@ -44,6 +45,10 @@ model Product {
   purchaseItems PurchaseItem[]
   saleItems     SaleItem[]
   stockMovements StockMovement[]
+  blendOutputs  BlendHistory[]  @relation("blendOutput")
+  blendInputs   BlendHistoryItem[] @relation("blendInput")
+  templateOutputs BlendTemplate[] @relation("templateOutput")
+  templateInputs  BlendTemplateItem[] @relation("templateInput")
 
   @@map("products")
 }
@@ -132,25 +137,27 @@ model PurchaseItem {
 // HÓA ĐƠN BÁN HÀNG
 // ============================================
 model Sale {
-  id            String     @id @default(cuid())
-  code          String     @unique // Mã hóa đơn
-  customerId    String?    @map("customer_id") // null = khách lẻ
-  saleDate      DateTime   @default(now()) @map("sale_date")
-  subtotal      Float      @default(0) // Tổng trước giảm giá
-  discount      Float      @default(0) // Giảm giá toàn đơn
-  totalAmount   Float      @default(0) @map("total_amount") // Tổng sau giảm giá
-  totalCost     Float      @default(0) @map("total_cost") // Tổng giá vốn
-  paidAmount    Float      @default(0) @map("paid_amount") // Tiền khách trả
-  debtAmount    Float      @default(0) @map("debt_amount") // Tiền còn nợ
-  notes         String?
-  paymentMethod String     @default("cash") @map("payment_method") // cash, transfer
-  status        String     @default("completed") // completed, cancelled
-  createdAt     DateTime   @default(now()) @map("created_at")
-  updatedAt     DateTime   @updatedAt @map("updated_at")
+  id                 String     @id @default(cuid())
+  code               String     @unique
+  customerId         String?    @map("customer_id")
+  deliveryEmployeeId String?    @map("delivery_employee_id")
+  saleDate           DateTime   @default(now()) @map("sale_date")
+  subtotal           Float      @default(0)
+  discount           Float      @default(0)
+  totalAmount        Float      @default(0) @map("total_amount")
+  totalCost          Float      @default(0) @map("total_cost")
+  paidAmount         Float      @default(0) @map("paid_amount")
+  debtAmount         Float      @default(0) @map("debt_amount")
+  notes              String?
+  paymentMethod      String     @default("cash") @map("payment_method")
+  status             String     @default("completed")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @updatedAt @map("updated_at")
 
-  customer      Customer?  @relation(fields: [customerId], references: [id])
-  items         SaleItem[]
-  debtTransactions DebtTransaction[]
+  customer           Customer?  @relation(fields: [customerId], references: [id])
+  deliveryEmployee   Employee?  @relation(fields: [deliveryEmployeeId], references: [id])
+  items              SaleItem[]
+  debtTransactions   DebtTransaction[]
 
   @@map("sales")
 }
@@ -258,6 +265,124 @@ model BackupLog {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("backup_logs")
+}
+
+// ============================================
+// TRỘN GẠO - LỊCH SỬ
+// ============================================
+model BlendHistory {
+  id              String             @id @default(cuid())
+  code            String             @unique // Mã phiếu trộn: TR001, TR002
+  outputProductId String             @map("output_product_id")
+  outputQuantity  Float              @map("output_quantity") // Tổng SL đầu ra
+  outputCostPrice Float              @map("output_cost_price") // Giá vốn BQ đầu ra
+  notes           String?
+  createdAt       DateTime           @default(now()) @map("created_at")
+
+  outputProduct   Product            @relation("blendOutput", fields: [outputProductId], references: [id])
+  items           BlendHistoryItem[]
+
+  @@map("blend_history")
+}
+
+model BlendHistoryItem {
+  id            String       @id @default(cuid())
+  blendId       String       @map("blend_id")
+  productId     String       @map("product_id")
+  quantity      Float        // SL nguyên liệu
+  costPrice     Float        @map("cost_price") // Giá vốn tại thời điểm trộn
+
+  blend         BlendHistory @relation(fields: [blendId], references: [id])
+  product       Product      @relation("blendInput", fields: [productId], references: [id])
+
+  @@map("blend_history_items")
+}
+
+// ============================================
+// TRỘN GẠO - MẪU TRỘN
+// ============================================
+model BlendTemplate {
+  id              String               @id @default(cuid())
+  name            String               @unique // Tên mẫu trộn
+  outputProductId String?              @map("output_product_id")
+  notes           String?
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+
+  outputProduct   Product?             @relation("templateOutput", fields: [outputProductId], references: [id])
+  items           BlendTemplateItem[]
+
+  @@map("blend_templates")
+}
+
+model BlendTemplateItem {
+  id         String        @id @default(cuid())
+  templateId String        @map("template_id")
+  productId  String        @map("product_id")
+  quantity   Float         // SL nguyên liệu
+
+  template   BlendTemplate @relation(fields: [templateId], references: [id])
+  product    Product       @relation("templateInput", fields: [productId], references: [id])
+
+  @@map("blend_template_items")
+}
+
+// ============================================
+// NHÂN VIÊN
+// ============================================
+model Employee {
+  id          String          @id @default(cuid())
+  code        String          @unique // NV001, NV002
+  name        String
+  phone       String?
+  salaryType  String          @default("delivery") @map("salary_type") // hourly, delivery, both
+  hourlyRate  Float           @default(0) @map("hourly_rate") // Lương/giờ
+  isActive    Boolean         @default(true) @map("is_active")
+  notes       String?
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  shifts          EmployeeShift[]
+  deliverySales   Sale[]
+  salaryPayments  SalaryPayment[]
+
+  @@map("employees")
+}
+
+// Ca làm việc nhân viên
+model EmployeeShift {
+  id          String   @id @default(cuid())
+  employeeId  String   @map("employee_id")
+  date        DateTime // Ngày làm
+  startTime   String   @map("start_time") // "07:00"
+  endTime     String   @map("end_time") // "10:00"
+  hours       Float    // Số giờ = end - start
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  employee    Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("employee_shifts")
+}
+
+// Thanh toán lương
+model SalaryPayment {
+  id          String   @id @default(cuid())
+  employeeId  String   @map("employee_id")
+  periodType  String   @map("period_type") // daily, weekly, monthly
+  periodStart DateTime @map("period_start")
+  periodEnd   DateTime @map("period_end")
+  hourlyPay   Float    @default(0) @map("hourly_pay")
+  deliveryPay Float    @default(0) @map("delivery_pay")
+  totalPay    Float    @default(0) @map("total_pay")
+  type        String   @default("salary") // salary, advance (ứng lương)
+  expenseId   String?  @map("expense_id") // Link đến chi phí tự tạo
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  employee    Employee @relation(fields: [employeeId], references: [id])
+
+  @@map("salary_payments")
 }
 
 // ============================================

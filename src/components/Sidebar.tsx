@@ -20,6 +20,7 @@ import {
   Settings,
   Database,
   History,
+  Beaker,
 } from 'lucide-react';
 
 const navGroups = [
@@ -35,6 +36,7 @@ const navGroups = [
       { label: 'Sản phẩm', href: '/san-pham', icon: Package },
       { label: 'Nhà cung cấp', href: '/nha-cung-cap', icon: Truck },
       { label: 'Khách hàng', href: '/khach-hang', icon: Users },
+      { label: 'Nhân viên', href: '/nhan-vien', icon: Users },
       { label: 'Danh mục chi phí', href: '/danh-muc-chi-phi', icon: ClipboardList },
     ],
   },
@@ -46,6 +48,7 @@ const navGroups = [
       { label: 'Nhập hàng', href: '/nhap-hang', icon: ClipboardList },
       { label: 'Công nợ', href: '/cong-no', icon: Wallet },
       { label: 'Chi phí', href: '/chi-phi', icon: DollarSign },
+      { label: 'Trộn gạo', href: '/tron-gao', icon: Beaker },
       { label: 'Tồn kho', href: '/ton-kho', icon: Warehouse },
     ],
   },

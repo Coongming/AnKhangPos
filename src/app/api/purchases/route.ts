@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create purchase (TRANSACTION: create purchase + update stock + update cost + create debt)
+// POST - Create purchase (TRANSACTION)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -35,7 +35,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Vui lòng chọn nhà cung cấp và thêm sản phẩm' }, { status: 400 });
     }
 
-    // Generate purchase code
     const lastPurchase = await prisma.purchase.findFirst({
       orderBy: { code: 'desc' },
       select: { code: true },
@@ -50,9 +49,7 @@ export async function POST(request: NextRequest) {
     const paid = parseFloat(paidAmount) || 0;
     const debtAmount = totalAmount - paid;
 
-    // Execute everything in a single transaction
     const purchase = await prisma.$transaction(async (tx) => {
-      // 1. Create purchase
       const newPurchase = await tx.purchase.create({
         data: {
           code,
@@ -65,13 +62,11 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // 2. Create purchase items + update product stock & cost
       for (const item of items) {
         const { productId, quantity, unitPrice } = item;
         const qty = parseFloat(quantity);
         const price = parseFloat(unitPrice);
 
-        // Create purchase item
         await tx.purchaseItem.create({
           data: {
             purchaseId: newPurchase.id,
@@ -82,19 +77,13 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        // Get current product
         const product = await tx.product.findUnique({ where: { id: productId } });
         if (!product) throw new Error(`Sản phẩm không tồn tại: ${productId}`);
 
-        // Calculate weighted average cost
         const newCostPrice = calculateWeightedAvgCost(
-          product.stock,
-          product.costPrice,
-          qty,
-          price
+          product.stock, product.costPrice, qty, price
         );
 
-        // Update product stock, cost, last purchase price
         await tx.product.update({
           where: { id: productId },
           data: {
@@ -104,7 +93,6 @@ export async function POST(request: NextRequest) {
           },
         });
 
-        // Create stock movement
         await tx.stockMovement.create({
           data: {
             productId,
@@ -117,7 +105,6 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // 3. Update supplier debt if there's remaining debt
       if (debtAmount > 0) {
         const supplier = await tx.supplier.findUnique({ where: { id: supplierId } });
         if (!supplier) throw new Error('Nhà cung cấp không tồn tại');
@@ -127,7 +114,6 @@ export async function POST(request: NextRequest) {
           data: { debt: { increment: debtAmount } },
         });
 
-        // Record debt transaction
         await tx.debtTransaction.create({
           data: {
             type: 'supplier_debt',
@@ -151,13 +137,217 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PUT - Cancel purchase
+// PUT - Full edit purchase OR Cancel purchase
 export async function PUT(request: NextRequest) {
   try {
-    const { id, action } = await request.json();
-    if (action !== 'cancel') {
-      return NextResponse.json({ error: 'Hành động không hợp lệ' }, { status: 400 });
+    const body = await request.json();
+    const { id, action } = body;
+
+    // --- Full edit ---
+    if (action === 'edit') {
+      const { purchaseDate, notes, supplierId, items, paidAmount } = body;
+
+      const purchase = await prisma.purchase.findUnique({
+        where: { id },
+        include: { items: true },
+      });
+      if (!purchase) return NextResponse.json({ error: 'Không tìm thấy phiếu nhập' }, { status: 404 });
+      if (purchase.status === 'cancelled') return NextResponse.json({ error: 'Không thể sửa phiếu đã hủy' }, { status: 400 });
+
+      // Simple edit (no items)
+      if (!items) {
+        const updateData: Record<string, unknown> = {};
+        if (purchaseDate) updateData.purchaseDate = new Date(purchaseDate);
+        if (notes !== undefined) updateData.notes = notes || null;
+        if (supplierId) updateData.supplierId = supplierId;
+        await prisma.purchase.update({ where: { id }, data: updateData });
+        return NextResponse.json({ success: true });
+      }
+
+      // Full edit with items → reverse old + apply new
+      await prisma.$transaction(async (tx) => {
+        // 1. REVERSE old stock
+        for (const oldItem of purchase.items) {
+          await tx.product.update({
+            where: { id: oldItem.productId },
+            data: { stock: { decrement: oldItem.quantity } },
+          });
+        }
+
+        // 2. REVERSE old supplier debt
+        if (purchase.debtAmount > 0) {
+          await tx.supplier.update({
+            where: { id: purchase.supplierId },
+            data: { debt: { decrement: purchase.debtAmount } },
+          });
+        }
+
+        // 3. Delete old items & related records
+        await tx.debtTransaction.deleteMany({ where: { purchaseId: id } });
+        await tx.stockMovement.deleteMany({ where: { referenceId: id } });
+        await tx.purchaseItem.deleteMany({ where: { purchaseId: id } });
+
+        // 4. Re-calculate
+        const newSupplierId = supplierId || purchase.supplierId;
+        const totalAmount = items.reduce(
+          (sum: number, item: { quantity: string; unitPrice: string }) =>
+            sum + parseFloat(item.quantity) * parseFloat(item.unitPrice), 0
+        );
+        const paid = parseFloat(paidAmount) || 0;
+        const debtAmount = Math.max(0, totalAmount - paid);
+
+        // 5. Update purchase
+        await tx.purchase.update({
+          where: { id },
+          data: {
+            supplierId: newSupplierId,
+            purchaseDate: purchaseDate ? new Date(purchaseDate) : purchase.purchaseDate,
+            totalAmount,
+            paidAmount: paid,
+            debtAmount,
+            notes: notes !== undefined ? (notes || null) : purchase.notes,
+          },
+        });
+
+        // 6. Create new items + add stock
+        for (const item of items) {
+          const qty = parseFloat(item.quantity);
+          const price = parseFloat(item.unitPrice);
+
+          await tx.purchaseItem.create({
+            data: {
+              purchaseId: id,
+              productId: item.productId,
+              quantity: qty,
+              unitPrice: price,
+              totalPrice: qty * price,
+            },
+          });
+
+          const product = await tx.product.findUnique({ where: { id: item.productId } });
+          if (!product) throw new Error('Sản phẩm không tồn tại');
+
+          const newCostPrice = calculateWeightedAvgCost(product.stock, product.costPrice, qty, price);
+
+          await tx.product.update({
+            where: { id: item.productId },
+            data: {
+              stock: { increment: qty },
+              costPrice: newCostPrice,
+              lastPurchasePrice: price,
+            },
+          });
+
+          await tx.stockMovement.create({
+            data: {
+              productId: item.productId,
+              type: 'purchase',
+              quantity: qty,
+              stockAfter: product.stock + qty,
+              referenceId: id,
+              notes: `Sửa phiếu nhập - ${purchase.code}`,
+            },
+          });
+        }
+
+        // 7. New supplier debt
+        if (debtAmount > 0) {
+          const supplier = await tx.supplier.findUnique({ where: { id: newSupplierId } });
+          if (!supplier) throw new Error('NCC không tồn tại');
+
+          await tx.supplier.update({
+            where: { id: newSupplierId },
+            data: { debt: { increment: debtAmount } },
+          });
+
+          await tx.debtTransaction.create({
+            data: {
+              type: 'supplier_debt',
+              supplierId: newSupplierId,
+              purchaseId: id,
+              amount: debtAmount,
+              balanceAfter: supplier.debt + debtAmount,
+              notes: `Công nợ phiếu nhập ${purchase.code} (sửa)`,
+            },
+          });
+        }
+      });
+
+      return NextResponse.json({ success: true });
     }
+
+    // --- Cancel purchase ---
+    if (action === 'cancel') {
+      const purchase = await prisma.purchase.findUnique({
+        where: { id },
+        include: { items: true },
+      });
+
+      if (!purchase) return NextResponse.json({ error: 'Không tìm thấy phiếu nhập' }, { status: 404 });
+      if (purchase.status === 'cancelled') return NextResponse.json({ error: 'Phiếu đã bị hủy' }, { status: 400 });
+
+      await prisma.$transaction(async (tx) => {
+        await tx.purchase.update({ where: { id }, data: { status: 'cancelled' } });
+
+        for (const item of purchase.items) {
+          const product = await tx.product.findUnique({ where: { id: item.productId } });
+          if (!product) continue;
+
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity } },
+          });
+
+          await tx.stockMovement.create({
+            data: {
+              productId: item.productId,
+              type: 'purchase_cancel',
+              quantity: -item.quantity,
+              stockAfter: product.stock - item.quantity,
+              referenceId: id,
+              notes: `Hủy phiếu nhập - ${purchase.code}`,
+            },
+          });
+        }
+
+        if (purchase.debtAmount > 0) {
+          const supplier = await tx.supplier.findUnique({ where: { id: purchase.supplierId } });
+          if (supplier) {
+            await tx.supplier.update({
+              where: { id: purchase.supplierId },
+              data: { debt: { decrement: purchase.debtAmount } },
+            });
+
+            await tx.debtTransaction.create({
+              data: {
+                type: 'supplier_payment',
+                supplierId: purchase.supplierId,
+                purchaseId: id,
+                amount: -purchase.debtAmount,
+                balanceAfter: supplier.debt - purchase.debtAmount,
+                notes: `Hủy phiếu nhập ${purchase.code} - hoàn nợ`,
+              },
+            });
+          }
+        }
+      });
+
+      return NextResponse.json({ success: true });
+    }
+
+    return NextResponse.json({ error: 'Hành động không hợp lệ' }, { status: 400 });
+  } catch (error) {
+    console.error('Purchases PUT error:', error);
+    return NextResponse.json({ error: 'Lỗi cập nhật phiếu nhập' }, { status: 500 });
+  }
+}
+
+// DELETE - Delete purchase (reverse + hard delete)
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'Thiếu ID' }, { status: 400 });
 
     const purchase = await prisma.purchase.findUnique({
       where: { id },
@@ -165,63 +355,50 @@ export async function PUT(request: NextRequest) {
     });
 
     if (!purchase) return NextResponse.json({ error: 'Không tìm thấy phiếu nhập' }, { status: 404 });
-    if (purchase.status === 'cancelled') return NextResponse.json({ error: 'Phiếu đã bị hủy' }, { status: 400 });
 
     await prisma.$transaction(async (tx) => {
-      // 1. Mark as cancelled
-      await tx.purchase.update({
-        where: { id },
-        data: { status: 'cancelled' },
-      });
+      if (purchase.status === 'completed') {
+        for (const item of purchase.items) {
+          const product = await tx.product.findUnique({ where: { id: item.productId } });
+          if (!product) continue;
 
-      // 2. Reverse stock for each item
-      for (const item of purchase.items) {
-        const product = await tx.product.findUnique({ where: { id: item.productId } });
-        if (!product) continue;
-
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
-        });
-
-        await tx.stockMovement.create({
-          data: {
-            productId: item.productId,
-            type: 'purchase_cancel',
-            quantity: -item.quantity,
-            stockAfter: product.stock - item.quantity,
-            referenceId: id,
-            notes: `Hủy phiếu nhập - ${purchase.code}`,
-          },
-        });
-      }
-
-      // 3. Reverse supplier debt
-      if (purchase.debtAmount > 0) {
-        const supplier = await tx.supplier.findUnique({ where: { id: purchase.supplierId } });
-        if (supplier) {
-          await tx.supplier.update({
-            where: { id: purchase.supplierId },
-            data: { debt: { decrement: purchase.debtAmount } },
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity } },
           });
 
-          await tx.debtTransaction.create({
+          await tx.stockMovement.create({
             data: {
-              type: 'supplier_payment',
-              supplierId: purchase.supplierId,
-              purchaseId: id,
-              amount: -purchase.debtAmount,
-              balanceAfter: supplier.debt - purchase.debtAmount,
-              notes: `Hủy phiếu nhập ${purchase.code} - hoàn nợ`,
+              productId: item.productId,
+              type: 'purchase_cancel',
+              quantity: -item.quantity,
+              stockAfter: product.stock - item.quantity,
+              referenceId: id,
+              notes: `Xóa phiếu nhập - ${purchase.code}`,
             },
           });
         }
+
+        if (purchase.debtAmount > 0) {
+          const supplier = await tx.supplier.findUnique({ where: { id: purchase.supplierId } });
+          if (supplier) {
+            await tx.supplier.update({
+              where: { id: purchase.supplierId },
+              data: { debt: { decrement: purchase.debtAmount } },
+            });
+          }
+        }
       }
+
+      await tx.debtTransaction.deleteMany({ where: { purchaseId: id } });
+      await tx.stockMovement.deleteMany({ where: { referenceId: id } });
+      await tx.purchaseItem.deleteMany({ where: { purchaseId: id } });
+      await tx.purchase.delete({ where: { id } });
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Cancel purchase error:', error);
-    return NextResponse.json({ error: 'Lỗi hủy phiếu nhập' }, { status: 500 });
+    console.error('Purchases DELETE error:', error);
+    return NextResponse.json({ error: 'Lỗi xóa phiếu nhập' }, { status: 500 });
   }
 }
