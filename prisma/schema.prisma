@@ -337,6 +337,7 @@ model Employee {
   phone       String?
   salaryType  String          @default("delivery") @map("salary_type") // hourly, delivery, both
   hourlyRate  Float           @default(0) @map("hourly_rate") // Lương/giờ
+  deliveryRate Float          @default(0) @map("delivery_rate") // Lương/bình (đơn vị)
   isActive    Boolean         @default(true) @map("is_active")
   notes       String?
   createdAt   DateTime        @default(now()) @map("created_at")

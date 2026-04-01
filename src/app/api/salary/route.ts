@@ -33,8 +33,8 @@ export async function GET(request: NextRequest) {
       const employee = await prisma.employee.findUnique({ where: { id: employeeId } });
       if (!employee) return NextResponse.json({ error: 'Không tìm thấy NV' }, { status: 404 });
 
-      const startDate = new Date(dateFrom);
-      const endDate = new Date(dateTo + 'T23:59:59');
+      const startDate = new Date(dateFrom + 'T00:00:00+07:00');
+      const endDate = new Date(dateTo + 'T23:59:59+07:00');
 
       // 1. Hourly pay
       let hourlyPay = 0;
@@ -50,9 +50,9 @@ export async function GET(request: NextRequest) {
         hourlyPay = totalHours * employee.hourlyRate;
       }
 
-      // 2. Delivery pay - calculate from sales items grouped by category
+      // 2. Delivery pay - count bottles delivered × employee rate
       let deliveryPay = 0;
-      const deliveryDetails: Array<{ category: string; quantity: number; rate: number; subtotal: number; unit: string }> = [];
+      let totalBottles = 0;
 
       if (employee.salaryType === 'delivery' || employee.salaryType === 'both') {
         const sales = await prisma.sale.findMany({
@@ -64,37 +64,22 @@ export async function GET(request: NextRequest) {
           include: {
             items: {
               include: {
-                product: {
-                  include: { category: true },
-                },
+                product: { select: { unit: true } },
               },
             },
           },
         });
 
-        // Group by category
-        const categoryMap: Record<string, { name: string; quantity: number; rate: number; unit: string }> = {};
+        // Only count items with unit "bình"
         for (const sale of sales) {
           for (const item of sale.items) {
-            const cat = item.product.category;
-            if (!categoryMap[cat.id]) {
-              categoryMap[cat.id] = { name: cat.name, quantity: 0, rate: cat.deliveryRate, unit: item.product.unit };
+            if (item.product.unit.toLowerCase() === 'bình') {
+              totalBottles += item.quantity;
             }
-            categoryMap[cat.id].quantity += item.quantity;
           }
         }
 
-        for (const [, info] of Object.entries(categoryMap)) {
-          const subtotal = info.quantity * info.rate;
-          deliveryPay += subtotal;
-          deliveryDetails.push({
-            category: info.name,
-            quantity: info.quantity,
-            rate: info.rate,
-            subtotal,
-            unit: info.unit,
-          });
-        }
+        deliveryPay = totalBottles * employee.deliveryRate;
       }
 
       // 3. Already paid advances in this period
@@ -114,7 +99,7 @@ export async function GET(request: NextRequest) {
         totalHours,
         hourlyPay,
         deliveryPay,
-        deliveryDetails,
+        totalBottles,
         totalAdvanced,
         totalPay: hourlyPay + deliveryPay,
         remaining: hourlyPay + deliveryPay - totalAdvanced,
@@ -132,8 +117,8 @@ export async function GET(request: NextRequest) {
       };
       if (dateFrom || dateTo) {
         where.saleDate = {};
-        if (dateFrom) (where.saleDate as Record<string, unknown>).gte = new Date(dateFrom);
-        if (dateTo) (where.saleDate as Record<string, unknown>).lte = new Date(dateTo + 'T23:59:59');
+        if (dateFrom) (where.saleDate as Record<string, unknown>).gte = new Date(dateFrom + 'T00:00:00+07:00');
+        if (dateTo) (where.saleDate as Record<string, unknown>).lte = new Date(dateTo + 'T23:59:59+07:00');
       }
 
       const sales = await prisma.sale.findMany({

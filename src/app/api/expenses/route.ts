@@ -12,9 +12,9 @@ export async function GET(request: NextRequest) {
     if (categoryId) where.categoryId = categoryId;
     if (dateFrom || dateTo) {
       where.date = {};
-      if (dateFrom) (where.date as Record<string, unknown>).gte = new Date(dateFrom);
+      if (dateFrom) (where.date as Record<string, unknown>).gte = new Date(dateFrom + 'T00:00:00+07:00');
       if (dateTo) {
-        const to = new Date(dateTo);
+        const to = new Date(dateTo + 'T00:00:00+07:00');
         to.setDate(to.getDate() + 1);
         (where.date as Record<string, unknown>).lt = to;
       }

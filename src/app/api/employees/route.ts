@@ -21,7 +21,7 @@ export async function GET() {
 // POST - Create employee
 export async function POST(request: NextRequest) {
   try {
-    const { name, phone, salaryType, hourlyRate, notes } = await request.json();
+    const { name, phone, salaryType, hourlyRate, deliveryRate, notes } = await request.json();
     if (!name?.trim()) return NextResponse.json({ error: 'Vui lòng nhập tên' }, { status: 400 });
 
     const last = await prisma.employee.findFirst({ orderBy: { code: 'desc' }, select: { code: true } });
@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
         phone: phone || null,
         salaryType: salaryType || 'delivery',
         hourlyRate: parseFloat(hourlyRate) || 0,
+        deliveryRate: parseFloat(deliveryRate) || 0,
         notes: notes || null,
       },
     });
@@ -47,7 +48,7 @@ export async function POST(request: NextRequest) {
 // PUT - Update employee
 export async function PUT(request: NextRequest) {
   try {
-    const { id, name, phone, salaryType, hourlyRate, notes, isActive } = await request.json();
+    const { id, name, phone, salaryType, hourlyRate, deliveryRate, notes, isActive } = await request.json();
     if (!id) return NextResponse.json({ error: 'Thiếu ID' }, { status: 400 });
 
     const data: Record<string, unknown> = {};
@@ -55,6 +56,7 @@ export async function PUT(request: NextRequest) {
     if (phone !== undefined) data.phone = phone || null;
     if (salaryType !== undefined) data.salaryType = salaryType;
     if (hourlyRate !== undefined) data.hourlyRate = parseFloat(hourlyRate) || 0;
+    if (deliveryRate !== undefined) data.deliveryRate = parseFloat(deliveryRate) || 0;
     if (notes !== undefined) data.notes = notes || null;
     if (isActive !== undefined) data.isActive = isActive;
 

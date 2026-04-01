@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Receipt, Eye, XCircle, Trash2, Edit3, Search, Plus } from 'lucide-react';
+import { Receipt, Eye, XCircle, Trash2, Edit3, Search, Plus, Copy } from 'lucide-react';
 import { useToast } from '@/components/Toast';
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
+import { formatCurrency, formatDate, formatDateTime, formatOrderForCopy } from '@/lib/utils';
 
 interface Product { id: string; code: string; name: string; unit: string; salePrice: number; stock: number; }
 interface Customer { id: string; code: string; name: string; }
@@ -11,7 +11,7 @@ interface Sale {
   id: string; code: string; saleDate: string; subtotal: number; discount: number;
   totalAmount: number; paidAmount: number; debtAmount: number; status: string; notes: string | null;
   paymentMethod: string;
-  customer: { name: string; code: string } | null;
+  customer: { name: string; code: string; phone: string | null } | null;
   customerId: string | null;
   deliveryEmployee: { name: string; code: string } | null;
   deliveryEmployeeId: string | null;
@@ -63,6 +63,25 @@ export default function SalesHistoryPage() {
   }, [dateFrom, dateTo, statusFilter, paymentMethodFilter, showToast]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleCopyOrder = async (sale: Sale) => {
+    const text = formatOrderForCopy({
+      customer: sale.customer,
+      phone: sale.customer?.phone || null,
+      items: sale.items.map(it => ({
+        quantity: it.quantity,
+        unitPrice: it.unitPrice,
+        totalPrice: it.totalPrice,
+        product: it.product,
+      })),
+      totalAmount: sale.totalAmount,
+      notes: sale.notes,
+    });
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('success', '📋 Đã copy đơn hàng!');
+    } catch { showToast('error', 'Lỗi copy'); }
+  };
 
   const handleCancel = async (sale: Sale) => {
     if (!confirm(`Hủy hóa đơn ${sale.code}? Tồn kho và công nợ sẽ được hoàn nguyên.`)) return;
@@ -198,6 +217,7 @@ export default function SalesHistoryPage() {
                   <td className="text-center">
                     <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
                       <button className="btn btn-ghost btn-sm" onClick={() => setViewSale(s)} title="Xem"><Eye size={14} /></button>
+                      <button className="btn btn-ghost btn-sm" onClick={() => handleCopyOrder(s)} title="Copy đơn"><Copy size={14} /></button>
                       {s.status === 'completed' && <button className="btn btn-ghost btn-sm" onClick={() => openEdit(s)} title="Sửa"><Edit3 size={14} /></button>}
                       {s.status === 'completed' && <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleCancel(s)} title="Hủy"><XCircle size={14} /></button>}
                       <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(s)} title="Xóa"><Trash2 size={14} /></button>

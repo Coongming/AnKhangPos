@@ -18,9 +18,9 @@ export async function GET(request: NextRequest) {
     if (paymentMethod) where.paymentMethod = paymentMethod;
     if (dateFrom || dateTo) {
       where.saleDate = {};
-      if (dateFrom) (where.saleDate as Record<string, unknown>).gte = new Date(dateFrom);
+      if (dateFrom) (where.saleDate as Record<string, unknown>).gte = new Date(dateFrom + 'T00:00:00+07:00');
       if (dateTo) {
-        const to = new Date(dateTo);
+        const to = new Date(dateTo + 'T00:00:00+07:00');
         to.setDate(to.getDate() + 1);
         (where.saleDate as Record<string, unknown>).lt = to;
       }
@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     const sales = await prisma.sale.findMany({
       where,
       include: {
-        customer: { select: { name: true, code: true } },
+        customer: { select: { name: true, code: true, phone: true } },
         deliveryEmployee: { select: { name: true, code: true } },
         items: { include: { product: { select: { name: true, code: true, unit: true } } } },
       },

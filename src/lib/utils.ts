@@ -90,3 +90,37 @@ export function getStartOfYearVN(): Date {
   vnTime.setUTCHours(0, 0, 0, 0);
   return new Date(vnTime.getTime() - VN_OFFSET);
 }
+
+// Format order text for clipboard (gửi shipper)
+export function formatOrderForCopy(sale: {
+  customer?: { name: string } | null;
+  customerName?: string;
+  phone?: string | null;
+  items: Array<{ quantity: number; unitPrice: number; totalPrice: number; product: { name: string; unit: string } }>;
+  totalAmount: number;
+  notes?: string | null;
+}): string {
+  const lines: string[] = [];
+  const fmtPrice = (n: number) => new Intl.NumberFormat('vi-VN').format(Math.round(n)) + 'đ';
+
+  // Customer name
+  const name = sale.customer?.name || sale.customerName || 'Khách lẻ';
+  lines.push(name);
+
+  // Phone
+  if (sale.phone) lines.push(sale.phone);
+
+  // Items
+  for (const item of sale.items) {
+    const qty = item.quantity % 1 === 0 ? item.quantity.toString() : item.quantity.toFixed(1);
+    lines.push(`${qty} ${item.product.unit} ${item.product.name} ${fmtPrice(item.totalPrice)}`);
+  }
+
+  // Total
+  lines.push(`Tổng ${fmtPrice(sale.totalAmount)}`);
+
+  // Notes
+  if (sale.notes) lines.push(`(${sale.notes})`);
+
+  return lines.join('\n');
+}

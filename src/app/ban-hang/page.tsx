@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Search, Trash2, ShoppingCart, User, Plus, Minus, Banknote, CreditCard, Truck } from 'lucide-react';
+import { Search, Trash2, ShoppingCart, User, Plus, Minus, Banknote, CreditCard, Truck, Copy } from 'lucide-react';
 import { useToast } from '@/components/Toast';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatOrderForCopy } from '@/lib/utils';
 
 interface Product { id: string; code: string; name: string; unit: string; salePrice: number; costPrice: number; stock: number; category: { name: string }; }
 interface Customer { id: string; code: string; name: string; phone: string | null; debt: number; }
@@ -100,6 +100,26 @@ export default function SalesPage() {
       if (!res.ok) throw new Error((await res.json()).error);
       const sale = await res.json();
       showToast('success', `Đã tạo hóa đơn ${sale.code}`);
+
+      // Auto copy order for shipper
+      if (deliveryEmployeeId) {
+        const orderText = formatOrderForCopy({
+          customer: selectedCustomer ? { name: selectedCustomer.name } : null,
+          phone: selectedCustomer?.phone || null,
+          items: cart.map(c => ({
+            quantity: c.quantity,
+            unitPrice: c.unitPrice,
+            totalPrice: c.quantity * c.unitPrice - c.discount,
+            product: { name: c.name, unit: c.unit },
+          })),
+          totalAmount,
+          notes: notes || null,
+        });
+        try {
+          await navigator.clipboard.writeText(orderText);
+          showToast('success', '📋 Đã copy đơn giao hàng!');
+        } catch { /* clipboard may fail on some browsers */ }
+      }
 
       // Reset
       setCart([]); setSelectedCustomer(null); setOrderDiscount('0'); setPaidAmount(''); setNotes(''); setPaymentMethod('cash'); setDeliveryEmployeeId('');

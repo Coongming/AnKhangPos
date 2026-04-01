@@ -15,9 +15,8 @@ export async function GET(request: NextRequest) {
     let endDate: Date;
 
     if (dateFrom && dateTo) {
-      startDate = new Date(dateFrom);
-      endDate = new Date(dateTo);
-      endDate.setDate(endDate.getDate() + 1);
+      startDate = getStartOfDayVN(new Date(dateFrom + 'T00:00:00+07:00'));
+      endDate = getEndOfDayVN(new Date(dateTo + 'T00:00:00+07:00'));
     } else {
       switch (period) {
         case 'day':
@@ -60,7 +59,9 @@ export async function GET(request: NextRequest) {
       // Group by date
       const dailyData: Record<string, { date: string; revenue: number; orders: number; cashRevenue: number; transferRevenue: number }> = {};
       sales.forEach((s) => {
-        const dateKey = s.saleDate.toISOString().split('T')[0];
+        // Convert to VN timezone for correct date grouping
+        const vnDate = new Date(s.saleDate.getTime() + 7 * 60 * 60 * 1000);
+        const dateKey = vnDate.toISOString().split('T')[0];
         if (!dailyData[dateKey]) dailyData[dateKey] = { date: dateKey, revenue: 0, orders: 0, cashRevenue: 0, transferRevenue: 0 };
         dailyData[dateKey].revenue += s.totalAmount;
         dailyData[dateKey].orders += 1;

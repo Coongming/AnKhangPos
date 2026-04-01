@@ -7,27 +7,27 @@ import { formatCurrency, formatDate, formatNumber } from '@/lib/utils';
 
 interface Employee {
   id: string; code: string; name: string; phone: string | null; salaryType: string;
-  hourlyRate: number; isActive: boolean; notes: string | null;
+  hourlyRate: number; deliveryRate: number; isActive: boolean; notes: string | null;
   _count: { deliverySales: number; shifts: number };
 }
-interface Category { id: string; name: string; deliveryRate: number; }
+
 interface Shift { id: string; employeeId: string; date: string; startTime: string; endTime: string; hours: number; notes: string | null; }
 interface DeliveryItem { code: string; saleDate: string; customer: { name: string } | null; items: Array<{ quantity: number; product: { name: string; unit: string } }>; }
 interface SalaryCalc {
   employee: Employee; totalHours: number; hourlyPay: number; deliveryPay: number; totalPay: number; remaining: number; totalAdvanced: number;
-  deliveryDetails: Array<{ category: string; quantity: number; rate: number; subtotal: number; unit: string }>;
+  totalBottles: number;
 }
 
 export default function EmployeesPage() {
   const { showToast } = useToast();
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+
   const [loading, setLoading] = useState(true);
 
   // Form
   const [showForm, setShowForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const [form, setForm] = useState({ name: '', phone: '', salaryType: 'delivery', hourlyRate: '', notes: '' });
+  const [form, setForm] = useState({ name: '', phone: '', salaryType: 'delivery', hourlyRate: '', deliveryRate: '', notes: '' });
 
   // Detail view
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
@@ -48,16 +48,12 @@ export default function EmployeesPage() {
   const [salaryNotes, setSalaryNotes] = useState('');
   const [advanceAmount, setAdvanceAmount] = useState('');
 
-  // Category delivery rates
-  const [showRatesModal, setShowRatesModal] = useState(false);
-  const [editingRates, setEditingRates] = useState<Record<string, string>>({});
+
 
   const fetchData = useCallback(async () => {
     try {
-      const [empRes, catRes] = await Promise.all([fetch('/api/employees'), fetch('/api/categories')]);
+      const [empRes] = await Promise.all([fetch('/api/employees')]);
       setEmployees(await empRes.json());
-      const cats = await catRes.json();
-      setCategories(cats);
     } catch { showToast('error', 'Lỗi tải dữ liệu'); }
     finally { setLoading(false); }
   }, [showToast]);
@@ -73,8 +69,8 @@ export default function EmployeesPage() {
   }, []);
 
   // --- Employee CRUD ---
-  const openCreate = () => { setEditingEmployee(null); setForm({ name: '', phone: '', salaryType: 'delivery', hourlyRate: '', notes: '' }); setShowForm(true); };
-  const openEdit = (e: Employee) => { setEditingEmployee(e); setForm({ name: e.name, phone: e.phone || '', salaryType: e.salaryType, hourlyRate: String(e.hourlyRate || ''), notes: e.notes || '' }); setShowForm(true); };
+  const openCreate = () => { setEditingEmployee(null); setForm({ name: '', phone: '', salaryType: 'delivery', hourlyRate: '', deliveryRate: '', notes: '' }); setShowForm(true); };
+  const openEdit = (e: Employee) => { setEditingEmployee(e); setForm({ name: e.name, phone: e.phone || '', salaryType: e.salaryType, hourlyRate: String(e.hourlyRate || ''), deliveryRate: String(e.deliveryRate || ''), notes: e.notes || '' }); setShowForm(true); };
 
   const handleSave = async () => {
     if (!form.name.trim()) { showToast('error', 'Nhập tên NV'); return; }
@@ -196,27 +192,7 @@ export default function EmployeesPage() {
     } catch (err) { showToast('error', err instanceof Error ? err.message : 'Lỗi'); }
   };
 
-  // --- Delivery rates ---
-  const openRatesModal = () => {
-    const rates: Record<string, string> = {};
-    categories.forEach(c => { rates[c.id] = String(c.deliveryRate || 0); });
-    setEditingRates(rates);
-    setShowRatesModal(true);
-  };
 
-  const saveRates = async () => {
-    try {
-      for (const [catId, rate] of Object.entries(editingRates)) {
-        await fetch('/api/categories', {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: catId, deliveryRate: rate }),
-        });
-      }
-      showToast('success', 'Đã cập nhật giá ship');
-      setShowRatesModal(false);
-      fetchData();
-    } catch { showToast('error', 'Lỗi'); }
-  };
 
   const salaryTypeLabel = (t: string) => t === 'hourly' ? '⏰ Theo giờ' : t === 'delivery' ? '🚚 Theo giao hàng' : '⏰🚚 Cả hai';
 
@@ -230,9 +206,7 @@ export default function EmployeesPage() {
       </div>
 
       <div className="toolbar">
-        <div className="toolbar-left">
-          <button className="btn btn-ghost" onClick={openRatesModal}>⚙️ Giá ship theo nhóm SP</button>
-        </div>
+        <div className="toolbar-left"></div>
         <div className="toolbar-right">
           <button className="btn btn-primary" onClick={openCreate}><Plus size={16} /> Thêm nhân viên</button>
         </div>
@@ -244,7 +218,7 @@ export default function EmployeesPage() {
       ) : (
         <div className="table-wrapper">
           <table className="table">
-            <thead><tr><th>Mã</th><th>Tên</th><th>SĐT</th><th>Chế độ lương</th><th className="text-right">Lương/giờ</th><th className="text-center">Số đơn giao</th><th>Trạng thái</th><th className="text-center">Thao tác</th></tr></thead>
+            <thead><tr><th>Mã</th><th>Tên</th><th>SĐT</th><th>Chế độ lương</th><th className="text-right">Lương/giờ</th><th className="text-right">Lương/bình</th><th className="text-center">Số đơn giao</th><th>Trạng thái</th><th className="text-center">Thao tác</th></tr></thead>
             <tbody>
               {employees.map(e => (
                 <tr key={e.id} style={{ opacity: e.isActive ? 1 : 0.5, cursor: 'pointer' }} onClick={() => openDetail(e)}>
@@ -253,6 +227,7 @@ export default function EmployeesPage() {
                   <td className="text-muted">{e.phone || '—'}</td>
                   <td>{salaryTypeLabel(e.salaryType)}</td>
                   <td className="text-right">{e.salaryType !== 'delivery' ? formatCurrency(e.hourlyRate) : '—'}</td>
+                  <td className="text-right">{e.salaryType !== 'hourly' ? formatCurrency(e.deliveryRate) + '/bình' : '—'}</td>
                   <td className="text-center">{e._count.deliverySales}</td>
                   <td><span className={`badge ${e.isActive ? 'badge-success' : 'badge-danger'}`}>{e.isActive ? 'Đang làm' : 'Nghỉ'}</span></td>
                   <td className="text-center" onClick={ev => ev.stopPropagation()}>
@@ -288,6 +263,9 @@ export default function EmployeesPage() {
               </div>
               {(form.salaryType === 'hourly' || form.salaryType === 'both') && (
                 <div className="form-group"><label className="form-label">Lương/giờ (VNĐ)</label><input className="form-input" type="number" value={form.hourlyRate} onChange={e => setForm({ ...form, hourlyRate: e.target.value })} /></div>
+              )}
+              {(form.salaryType === 'delivery' || form.salaryType === 'both') && (
+                <div className="form-group"><label className="form-label">Lương/bình (VNĐ)</label><input className="form-input" type="number" value={form.deliveryRate} onChange={e => setForm({ ...form, deliveryRate: e.target.value })} placeholder="VD: 6000" /></div>
               )}
               <div className="form-group"><label className="form-label">Ghi chú</label><input className="form-input" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} /></div>
               <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
@@ -407,9 +385,7 @@ export default function EmployeesPage() {
                       {(selectedEmployee.salaryType === 'delivery' || selectedEmployee.salaryType === 'both') && (
                         <div style={{ marginBottom: 12 }}>
                           <strong>🚚 Lương giao hàng:</strong>
-                          {salaryCalc.deliveryDetails.map((d, i) => (
-                            <div key={i} className="text-muted" style={{ fontSize: 13 }}>{d.category}: {formatNumber(d.quantity)} {d.unit} × {formatCurrency(d.rate)} = <strong>{formatCurrency(d.subtotal)}</strong></div>
-                          ))}
+                          <div className="text-muted" style={{ fontSize: 13 }}>{salaryCalc.totalBottles} bình × {formatCurrency(selectedEmployee.deliveryRate)}/bình</div>
                           <div style={{ fontWeight: 700, color: 'var(--accent)' }}>{formatCurrency(salaryCalc.deliveryPay)}</div>
                         </div>
                       )}
@@ -450,27 +426,6 @@ export default function EmployeesPage() {
         </div>
       )}
 
-      {/* Delivery Rates Modal */}
-      {showRatesModal && (
-        <div className="modal-overlay" onClick={() => setShowRatesModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header"><h3>⚙️ Giá ship theo nhóm sản phẩm</h3><button className="modal-close" onClick={() => setShowRatesModal(false)}>✕</button></div>
-            <div className="modal-body">
-              <p className="text-muted" style={{ marginBottom: 12, fontSize: 13 }}>Giá tính cho mỗi đơn vị sản phẩm (kg, bình, thùng...)</p>
-              {categories.map(c => (
-                <div key={c.id} className="form-group">
-                  <label className="form-label">{c.name} (VNĐ/đơn vị)</label>
-                  <input className="form-input" type="number" value={editingRates[c.id] || '0'} onChange={e => setEditingRates({ ...editingRates, [c.id]: e.target.value })} />
-                </div>
-              ))}
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-                <button className="btn btn-ghost" onClick={() => setShowRatesModal(false)}>Hủy</button>
-                <button className="btn btn-primary" onClick={saveRates}>Lưu giá ship</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
