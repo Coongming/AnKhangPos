@@ -54,3 +54,42 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Lỗi tạo chi phí' }, { status: 500 });
   }
 }
+
+// PUT - Update expense
+export async function PUT(request: NextRequest) {
+  try {
+    const { id, categoryId, amount, date, description, notes } = await request.json();
+    if (!id) return NextResponse.json({ error: 'Thiếu ID' }, { status: 400 });
+
+    const expense = await prisma.expense.update({
+      where: { id },
+      data: {
+        ...(categoryId && { categoryId }),
+        ...(amount !== undefined && { amount: parseFloat(amount) }),
+        ...(date && { date: new Date(date) }),
+        ...(description !== undefined && { description: description || null }),
+        ...(notes !== undefined && { notes: notes || null }),
+      },
+      include: { category: true },
+    });
+    return NextResponse.json(expense);
+  } catch (error) {
+    console.error('Expenses PUT error:', error);
+    return NextResponse.json({ error: 'Lỗi cập nhật chi phí' }, { status: 500 });
+  }
+}
+
+// DELETE - Delete expense
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'Thiếu ID' }, { status: 400 });
+
+    await prisma.expense.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Expenses DELETE error:', error);
+    return NextResponse.json({ error: 'Lỗi xóa chi phí' }, { status: 500 });
+  }
+}
