@@ -1,6 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { generateCode, calculateWeightedAvgCost } from '@/lib/utils';
+import { generateCode } from '@/lib/utils';
+
+// Tính giá vốn bình quân đơn giản: Tổng giá trị nhập / Tổng SL nhập
+async function calculateSimpleAvgCost(tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0], productId: string): Promise<number> {
+  const allItems = await tx.purchaseItem.findMany({
+    where: {
+      productId,
+      purchase: { status: 'completed' },
+    },
+  });
+  const totalQty = allItems.reduce((sum, item) => sum + item.quantity, 0);
+  const totalValue = allItems.reduce((sum, item) => sum + item.totalPrice, 0);
+  return totalQty > 0 ? totalValue / totalQty : 0;
+}
 
 // GET - List purchases
 export async function GET(request: NextRequest) {
@@ -80,9 +93,8 @@ export async function POST(request: NextRequest) {
         const product = await tx.product.findUnique({ where: { id: productId } });
         if (!product) throw new Error(`Sản phẩm không tồn tại: ${productId}`);
 
-        const newCostPrice = calculateWeightedAvgCost(
-          product.stock, product.costPrice, qty, price
-        );
+        // Tính giá vốn bình quân đơn giản (tổng giá trị / tổng SL tất cả phiếu nhập)
+        const newCostPrice = await calculateSimpleAvgCost(tx, productId);
 
         await tx.product.update({
           where: { id: productId },
@@ -227,7 +239,8 @@ export async function PUT(request: NextRequest) {
           const product = await tx.product.findUnique({ where: { id: item.productId } });
           if (!product) throw new Error('Sản phẩm không tồn tại');
 
-          const newCostPrice = calculateWeightedAvgCost(product.stock, product.costPrice, qty, price);
+          // Tính giá vốn bình quân đơn giản
+          const newCostPrice = await calculateSimpleAvgCost(tx, item.productId);
 
           await tx.product.update({
             where: { id: item.productId },

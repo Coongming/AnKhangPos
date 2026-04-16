@@ -42,7 +42,7 @@ async function main() {
     { key: 'store_phone', value: '' },
     { key: 'store_address', value: '' },
     { key: 'allow_negative_stock', value: 'false' },
-    { key: 'cost_method', value: 'weighted_average' },
+    { key: 'cost_method', value: 'simple_average' },
   ];
   for (const { key, value } of settings) {
     await prisma.systemSetting.upsert({

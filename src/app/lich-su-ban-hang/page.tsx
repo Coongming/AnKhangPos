@@ -183,8 +183,38 @@ export default function SalesHistoryPage() {
         <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>{sales.length} hóa đơn • Tổng: {formatCurrency(totalRevenue)}</p>
       </div>
 
-      <div className="toolbar">
-        <div className="toolbar-left">
+      <div className="toolbar" style={{ flexWrap: 'wrap' }}>
+        <div className="toolbar-left" style={{ flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 4 }}>
+            <button
+              className={`btn btn-sm ${!dateFrom && !dateTo ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => { setDateFrom(''); setDateTo(''); }}
+            >Tất cả</button>
+            <button
+              className={`btn btn-sm ${dateFrom === new Date().toISOString().split('T')[0] && dateTo === new Date().toISOString().split('T')[0] ? 'btn-primary' : 'btn-ghost'}`}
+              onClick={() => { const today = new Date().toISOString().split('T')[0]; setDateFrom(today); setDateTo(today); }}
+            >Hôm nay</button>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={() => {
+                const now = new Date();
+                const day = now.getDay() || 7;
+                const monday = new Date(now);
+                monday.setDate(now.getDate() - day + 1);
+                setDateFrom(monday.toISOString().split('T')[0]);
+                setDateTo(now.toISOString().split('T')[0]);
+              }}
+            >Tuần này</button>
+            <button
+              className="btn btn-sm btn-ghost"
+              onClick={() => {
+                const now = new Date();
+                const first = new Date(now.getFullYear(), now.getMonth(), 1);
+                setDateFrom(first.toISOString().split('T')[0]);
+                setDateTo(now.toISOString().split('T')[0]);
+              }}
+            >Tháng này</button>
+          </div>
           <input className="form-input" type="date" style={{ width: 150 }} value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
           <span className="text-muted">đến</span>
           <input className="form-input" type="date" style={{ width: 150 }} value={dateTo} onChange={e => setDateTo(e.target.value)} />

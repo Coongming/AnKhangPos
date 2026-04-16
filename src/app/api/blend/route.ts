@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { generateCode, calculateWeightedAvgCost } from '@/lib/utils';
+import { generateCode } from '@/lib/utils';
 
 // GET - List blend history
 export async function GET(request: NextRequest) {
@@ -147,16 +147,19 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      // 5. Add output stock + update cost price
+      // 5. Add output stock + update cost price (simple average)
       const outputProduct = await tx.product.findUnique({ where: { id: actualOutputProductId } });
       if (!outputProduct) throw new Error('Sản phẩm đầu ra không tồn tại');
 
-      const newCost = calculateWeightedAvgCost(
-        outputProduct.stock,
-        outputProduct.costPrice,
-        totalQuantity,
-        outputCostPrice
-      );
+      // Giá vốn = bình quân đơn giản từ tất cả phiếu nhập + giá trộn hiện tại
+      const allPurchaseItems = await tx.purchaseItem.findMany({
+        where: { productId: actualOutputProductId, purchase: { status: 'completed' } },
+      });
+      const purchaseQty = allPurchaseItems.reduce((s, i) => s + i.quantity, 0);
+      const purchaseValue = allPurchaseItems.reduce((s, i) => s + i.totalPrice, 0);
+      const combinedQty = purchaseQty + totalQuantity;
+      const combinedValue = purchaseValue + totalCost;
+      const newCost = combinedQty > 0 ? combinedValue / combinedQty : outputCostPrice;
 
       await tx.product.update({
         where: { id: actualOutputProductId },

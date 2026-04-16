@@ -24,6 +24,7 @@ export default function PurchasesPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState('');
+  const [filterSupplier, setFilterSupplier] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [paidAmount, setPaidAmount] = useState('');
   const [notes, setNotes] = useState('');
@@ -183,20 +184,32 @@ export default function PurchasesPage() {
       {!showForm ? (
         <>
           <div className="toolbar">
-            <div className="toolbar-left" />
+            <div className="toolbar-left">
+              <select
+                className="form-select"
+                style={{ width: 200 }}
+                value={filterSupplier}
+                onChange={e => setFilterSupplier(e.target.value)}
+              >
+                <option value="">Tất cả NCC</option>
+                {suppliers.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
             <div className="toolbar-right">
               <button className="btn btn-primary" onClick={() => setShowForm(true)}><Plus size={16} /> Tạo phiếu nhập</button>
             </div>
           </div>
 
-          {purchases.length === 0 ? (
+          {purchases.filter(p => !filterSupplier || p.supplierId === filterSupplier).length === 0 ? (
             <div className="card"><div className="empty-state"><ClipboardList /><h3>Chưa có phiếu nhập</h3></div></div>
           ) : (
             <div className="table-wrapper">
               <table className="table">
                 <thead><tr><th>Mã</th><th>Ngày</th><th>NCC</th><th className="text-right">Tổng tiền</th><th className="text-right">Đã trả</th><th className="text-right">Còn nợ</th><th>Trạng thái</th><th className="text-center">Thao tác</th></tr></thead>
                 <tbody>
-                  {purchases.map(p => (
+                  {purchases.filter(p => !filterSupplier || p.supplierId === filterSupplier).map(p => (
                     <tr key={p.id} style={{ opacity: p.status === 'cancelled' ? 0.5 : 1 }}>
                       <td style={{ fontWeight: 600, color: 'var(--accent)', cursor: 'pointer' }} onClick={() => setViewPurchase(p)}>{p.code}</td>
                       <td>{formatDate(p.purchaseDate)}</td>

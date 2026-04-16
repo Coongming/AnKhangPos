@@ -15,6 +15,7 @@ interface Product {
   specification: string | null;
   salePrice: number;
   costPrice: number;
+  lastPurchasePrice: number | null;
   stock: number;
   minStock: number;
   isActive: boolean;
@@ -273,7 +274,8 @@ export default function ProductsPage() {
                 <th>ĐVT</th>
                 <th>Quy cách</th>
                 <th className="text-right">Giá bán</th>
-                <th className="text-right">Giá vốn</th>
+                <th className="text-right">Giá nhập GN</th>
+                <th className="text-right">Giá vốn BQ</th>
                 <th className="text-right">Tồn kho</th>
                 <th>Trạng thái</th>
                 <th className="text-center">Thao tác</th>
@@ -291,6 +293,9 @@ export default function ProductsPage() {
                   <td className="text-muted">{p.specification || '—'}</td>
                   <td className="text-right" style={{ fontWeight: 600 }}>
                     {formatCurrency(p.salePrice)}
+                  </td>
+                  <td className="text-right" style={{ fontWeight: 600, color: 'var(--warning)' }}>
+                    {p.lastPurchasePrice ? formatCurrency(p.lastPurchasePrice) : '—'}
                   </td>
                   <td className="text-right text-muted">
                     {formatCurrency(p.costPrice)}

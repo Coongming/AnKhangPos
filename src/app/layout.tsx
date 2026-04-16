@@ -26,6 +26,17 @@ export default function RootLayout({
             </main>
           </div>
         </ToastProvider>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              document.addEventListener('wheel', function(e) {
+                if (document.activeElement && document.activeElement.type === 'number') {
+                  document.activeElement.blur();
+                }
+              }, { passive: true });
+            `,
+          }}
+        />
       </body>
     </html>
   );

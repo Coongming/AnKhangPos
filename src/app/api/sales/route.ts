@@ -219,6 +219,12 @@ export async function PUT(request: NextRequest) {
         return NextResponse.json({ success: true });
       }
 
+      // Check system setting for negative stock
+      const allowNegStock = await prisma.systemSetting.findUnique({
+        where: { key: 'allow_negative_stock' },
+      });
+      const allowNegative = allowNegStock?.value === 'true';
+
       // Full edit with items → reverse old + apply new in transaction
       await prisma.$transaction(async (tx) => {
         // 1. REVERSE old stock
@@ -256,6 +262,11 @@ export async function PUT(request: NextRequest) {
           const lineTotal = qty * price - itemDiscount;
           const product = await tx.product.findUnique({ where: { id: item.productId } });
           if (!product) throw new Error('Sản phẩm không tồn tại');
+
+          // Check stock before deducting (after old items were reversed)
+          if (!allowNegative && product.stock < qty) {
+            throw new Error(`Sản phẩm "${product.name}" không đủ tồn kho (còn ${product.stock} ${product.unit}, cần ${qty})`);
+          }
 
           subtotal += lineTotal;
           totalCost += qty * product.costPrice;
