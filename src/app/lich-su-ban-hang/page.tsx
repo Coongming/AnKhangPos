@@ -34,6 +34,7 @@ export default function SalesHistoryPage() {
   // Edit state
   const [editSale, setEditSale] = useState<Sale | null>(null);
   const [editDate, setEditDate] = useState('');
+  const [editOriginalDate, setEditOriginalDate] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editCustomerId, setEditCustomerId] = useState('');
   const [editPaymentMethod, setEditPaymentMethod] = useState('cash');
@@ -107,6 +108,7 @@ export default function SalesHistoryPage() {
   // --- Edit ---
   const openEdit = (sale: Sale) => {
     setEditSale(sale);
+    setEditOriginalDate(sale.saleDate);
     setEditDate(sale.saleDate.split('T')[0]);
     setEditNotes(sale.notes || '');
     setEditCustomerId(sale.customerId || '');
@@ -156,7 +158,10 @@ export default function SalesHistoryPage() {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: editSale.id, action: 'edit',
-          saleDate: editDate, notes: editNotes,
+          saleDate: editDate === editOriginalDate.split('T')[0]
+            ? editOriginalDate
+            : editDate + 'T' + (editOriginalDate.split('T')[1] || '00:00:00.000Z'),
+          notes: editNotes,
           customerId: editCustomerId, paymentMethod: editPaymentMethod,
           items: editItems.map(i => ({
             productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice, discount: i.discount,

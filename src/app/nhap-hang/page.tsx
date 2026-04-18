@@ -35,6 +35,7 @@ export default function PurchasesPage() {
   // Edit state
   const [editPurchase, setEditPurchase] = useState<Purchase | null>(null);
   const [editDate, setEditDate] = useState('');
+  const [editOriginalDate, setEditOriginalDate] = useState('');
   const [editNotes, setEditNotes] = useState('');
   const [editSupplierId, setEditSupplierId] = useState('');
   const [editItems, setEditItems] = useState<CartItem[]>([]);
@@ -118,6 +119,7 @@ export default function PurchasesPage() {
   // --- Edit ---
   const openEdit = (p: Purchase) => {
     setEditPurchase(p);
+    setEditOriginalDate(p.purchaseDate);
     setEditDate(p.purchaseDate.split('T')[0]);
     setEditNotes(p.notes || '');
     setEditSupplierId(p.supplierId);
@@ -154,7 +156,10 @@ export default function PurchasesPage() {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: editPurchase.id, action: 'edit',
-          purchaseDate: editDate, notes: editNotes, supplierId: editSupplierId,
+          purchaseDate: editDate === editOriginalDate.split('T')[0]
+            ? editOriginalDate
+            : editDate + 'T' + (editOriginalDate.split('T')[1] || '00:00:00.000Z'),
+          notes: editNotes, supplierId: editSupplierId,
           items: editItems.map(i => ({ productId: i.productId, quantity: i.quantity, unitPrice: i.unitPrice })),
           paidAmount: editPaidAmount,
         }),

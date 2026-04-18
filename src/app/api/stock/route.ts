@@ -12,13 +12,30 @@ export async function GET(request: NextRequest) {
       // Get movements for a specific product
       const where: Record<string, unknown> = { productId };
       if (type) where.type = type;
-      
-      const movements = await prisma.stockMovement.findMany({
-        where,
-        include: { product: { select: { name: true, code: true, unit: true } } },
-        orderBy: { createdAt: 'desc' },
-        take: 100,
-      });
+
+      const [movements, product] = await Promise.all([
+        prisma.stockMovement.findMany({
+          where,
+          include: { product: { select: { name: true, code: true, unit: true } } },
+          orderBy: { createdAt: 'desc' },
+          take: 100,
+        }),
+        prisma.product.findUnique({
+          where: { id: productId },
+          select: { stock: true },
+        }),
+      ]);
+
+      // Tính lại stockAfter động từ tồn kho hiện tại
+      // Đi từ mới→cũ: stockAfter[0] = currentStock, stockAfter[i] = stockAfter[i-1] - qty[i-1]
+      if (product) {
+        let runningStock = product.stock;
+        for (const m of movements) {
+          m.stockAfter = runningStock;
+          runningStock -= m.quantity;
+        }
+      }
+
       return NextResponse.json(movements);
     }
 
