@@ -5,10 +5,12 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 export const prisma = globalForPrisma.prisma ?? new PrismaClient({
+  log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error'],
   transactionOptions: {
     maxWait: 10000,  // 10s chờ kết nối
     timeout: 15000,  // 15s timeout cho transaction
   },
 });
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+// Cache connection cả production lẫn dev → tránh tạo connection mới mỗi request
+globalForPrisma.prisma = prisma;
