@@ -37,13 +37,20 @@ export async function GET() {
     const totalSuppliers = await prisma.supplier.count({ where: { isActive: true } });
 
     // Low stock products
-    const lowStockProducts = await prisma.$queryRaw`
+    const lowStockRaw = await prisma.$queryRaw`
       SELECT id, name, stock, min_stock as "minStock", unit
       FROM products
       WHERE is_active = true AND stock <= min_stock AND min_stock > 0
       ORDER BY stock ASC
       LIMIT 10
     ` as Array<{ id: string; name: string; stock: number; minStock: number; unit: string }>;
+
+    // Ensure no BigInt (Supabase can return BigInt for some numeric types)
+    const lowStockProducts = lowStockRaw.map(p => ({
+      ...p,
+      stock: Number(p.stock),
+      minStock: Number(p.minStock),
+    }));
 
     // Recent sales
     const recentSales = await prisma.sale.findMany({
