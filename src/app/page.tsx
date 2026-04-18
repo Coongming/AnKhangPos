@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   ShoppingCart,
   TrendingUp,
@@ -13,7 +13,18 @@ import {
   ArrowDown,
   Banknote,
   CreditCard,
+  BarChart3,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from 'recharts';
 import { formatCurrency, formatNumber } from '@/lib/utils';
 
 interface DashboardData {
@@ -43,17 +54,114 @@ interface DashboardData {
   }>;
 }
 
+interface ChartDataPoint {
+  date: string;
+  label: string;
+  revenue: number;
+  profit: number;
+  orders: number;
+}
+
+interface ChartResponse {
+  chartData: ChartDataPoint[];
+  summary: { totalRevenue: number; totalProfit: number; totalOrders: number };
+}
+
+type ChartPeriod = 'week' | 'month' | 'year' | 'custom';
+
+function getDateRange(period: ChartPeriod, customFrom?: string, customTo?: string) {
+  const now = new Date();
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+  if (period === 'custom' && customFrom && customTo) {
+    return { from: customFrom, to: customTo };
+  }
+
+  const to = fmt(now);
+
+  if (period === 'week') {
+    const from = new Date(now);
+    from.setDate(from.getDate() - 6);
+    return { from: fmt(from), to };
+  }
+
+  if (period === 'year') {
+    return { from: `${now.getFullYear()}-01-01`, to };
+  }
+
+  // month (default)
+  return { from: `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`, to };
+}
+
+// Custom tooltip cho biểu đồ
+function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string; color: string }>; label?: string }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: 'var(--bg-card)',
+      border: '1px solid var(--border)',
+      borderRadius: 8,
+      padding: '10px 14px',
+      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+      fontSize: 13,
+    }}>
+      <div style={{ fontWeight: 600, marginBottom: 6, color: 'var(--text-heading)' }}>{label}</div>
+      {payload.map((p, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, display: 'inline-block' }} />
+          <span style={{ color: 'var(--text-muted)' }}>{p.name}:</span>
+          <span style={{ fontWeight: 600, color: 'var(--text-heading)' }}>{formatCurrency(p.value)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Chart state
+  const [chartPeriod, setChartPeriod] = useState<ChartPeriod>('month');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+  const [chartData, setChartData] = useState<ChartResponse | null>(null);
+  const [chartLoading, setChartLoading] = useState(false);
 
   useEffect(() => {
     fetch('/api/dashboard')
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error('API error');
+        return res.json();
+      })
       .then(setData)
-      .catch(console.error)
+      .catch((e) => {
+        console.error(e);
+        setError('Không thể tải dữ liệu bảng điều khiển');
+      })
       .finally(() => setLoading(false));
   }, []);
+
+  const fetchChart = useCallback(() => {
+    const { from, to } = getDateRange(chartPeriod, customFrom, customTo);
+    if (!from || !to) return;
+
+    setChartLoading(true);
+    fetch(`/api/dashboard/chart?from=${from}&to=${to}`)
+      .then((res) => {
+        if (!res.ok) throw new Error('Chart API error');
+        return res.json();
+      })
+      .then(setChartData)
+      .catch(console.error)
+      .finally(() => setChartLoading(false));
+  }, [chartPeriod, customFrom, customTo]);
+
+  useEffect(() => {
+    fetchChart();
+  }, [fetchChart]);
 
   if (loading) {
     return (
@@ -63,9 +171,22 @@ export default function DashboardPage() {
     );
   }
 
-  if (!data) {
-    return <div>Không thể tải dữ liệu</div>;
+  if (error || !data) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>
+        <AlertTriangle size={40} style={{ marginBottom: 12, color: 'var(--warning)' }} />
+        <h3 style={{ color: 'var(--text-heading)', marginBottom: 8 }}>{error || 'Không thể tải dữ liệu'}</h3>
+        <button className="btn btn-primary" onClick={() => window.location.reload()}>Thử lại</button>
+      </div>
+    );
   }
+
+  const periodLabels: Record<ChartPeriod, string> = {
+    week: '7 ngày',
+    month: 'Tháng này',
+    year: 'Năm nay',
+    custom: 'Tùy chọn',
+  };
 
   return (
     <div>
@@ -183,6 +304,123 @@ export default function DashboardPage() {
             <h3>Nhà cung cấp</h3>
             <div className="stat-value">{formatNumber(data.totalSuppliers)}</div>
           </div>
+        </div>
+      </div>
+
+      {/* ===== BIỂU ĐỒ DOANH THU ===== */}
+      <div className="card" style={{ marginBottom: 24 }}>
+        <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <h3 className="card-title" style={{ margin: 0 }}>
+            <BarChart3 size={16} style={{ display: 'inline', marginRight: 8, verticalAlign: -2 }} />
+            Biểu đồ doanh thu
+          </h3>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+            {(['week', 'month', 'year', 'custom'] as ChartPeriod[]).map((p) => (
+              <button
+                key={p}
+                className={`btn btn-sm ${chartPeriod === p ? 'btn-primary' : 'btn-ghost'}`}
+                onClick={() => setChartPeriod(p)}
+                style={{ fontSize: 12, padding: '4px 12px' }}
+              >
+                {periodLabels[p]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {chartPeriod === 'custom' && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '0 16px 12px', flexWrap: 'wrap' }}>
+            <input
+              type="date"
+              className="form-input"
+              value={customFrom}
+              onChange={(e) => setCustomFrom(e.target.value)}
+              style={{ width: 'auto', fontSize: 13 }}
+            />
+            <span style={{ color: 'var(--text-muted)' }}>→</span>
+            <input
+              type="date"
+              className="form-input"
+              value={customTo}
+              onChange={(e) => setCustomTo(e.target.value)}
+              style={{ width: 'auto', fontSize: 13 }}
+            />
+            <button className="btn btn-primary btn-sm" onClick={fetchChart} style={{ fontSize: 12 }}>
+              Xem
+            </button>
+          </div>
+        )}
+
+        {/* Summary */}
+        {chartData?.summary && (
+          <div style={{ display: 'flex', gap: 24, padding: '0 16px 12px', flexWrap: 'wrap' }}>
+            <div>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Tổng doanh thu</span>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--accent)' }}>{formatCurrency(chartData.summary.totalRevenue)}</div>
+            </div>
+            <div>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Lợi nhuận</span>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--success)' }}>{formatCurrency(chartData.summary.totalProfit)}</div>
+            </div>
+            <div>
+              <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>Tổng đơn</span>
+              <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-heading)' }}>{formatNumber(chartData.summary.totalOrders)}</div>
+            </div>
+          </div>
+        )}
+
+        {/* Chart */}
+        <div style={{ padding: '0 8px 16px', height: 320 }}>
+          {chartLoading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+              <div className="loading-spinner" />
+            </div>
+          ) : chartData?.chartData?.length ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData.chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                />
+                <YAxis
+                  tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => v >= 1000000 ? `${(v / 1000000).toFixed(1)}M` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : v}
+                />
+                <Tooltip content={<ChartTooltip />} />
+                <Legend
+                  wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="revenue"
+                  name="Doanh thu"
+                  stroke="#6366f1"
+                  strokeWidth={2.5}
+                  dot={{ r: 3, fill: '#6366f1' }}
+                  activeDot={{ r: 5 }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="profit"
+                  name="Lợi nhuận"
+                  stroke="#22c55e"
+                  strokeWidth={2}
+                  dot={{ r: 2.5, fill: '#22c55e' }}
+                  activeDot={{ r: 4 }}
+                  strokeDasharray="5 3"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: 'var(--text-muted)' }}>
+              Không có dữ liệu trong khoảng thời gian này
+            </div>
+          )}
         </div>
       </div>
 

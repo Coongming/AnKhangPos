@@ -38,21 +38,13 @@ export async function GET() {
     const totalCustomers = await prisma.customer.count({ where: { isActive: true } });
     const totalSuppliers = await prisma.supplier.count({ where: { isActive: true } });
 
-    // Low stock products
-    const lowStockRaw = await prisma.$queryRaw`
-      SELECT id, name, stock, min_stock as "minStock", unit
-      FROM products
-      WHERE is_active = true AND stock <= min_stock AND min_stock > 0
-      ORDER BY stock ASC
-      LIMIT 10
-    ` as Array<{ id: string; name: string; stock: number; minStock: number; unit: string }>;
-
-    // Ensure no BigInt (Supabase can return BigInt for some numeric types)
-    const lowStockProducts = lowStockRaw.map(p => ({
-      ...p,
-      stock: Number(p.stock),
-      minStock: Number(p.minStock),
-    }));
+    // Low stock products — dùng Prisma findMany thay vì $queryRaw (tương thích PgBouncer)
+    const allProducts = await prisma.product.findMany({
+      where: { isActive: true, minStock: { gt: 0 } },
+      select: { id: true, name: true, stock: true, minStock: true, unit: true },
+      orderBy: { stock: 'asc' },
+    });
+    const lowStockProducts = allProducts.filter(p => p.stock <= p.minStock).slice(0, 10);
 
     // Recent sales
     const recentSales = await prisma.sale.findMany({
