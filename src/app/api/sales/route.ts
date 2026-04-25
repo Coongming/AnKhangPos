@@ -421,7 +421,8 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Hành động không hợp lệ' }, { status: 400 });
   } catch (error) {
     console.error('Sales PUT error:', error);
-    return NextResponse.json({ error: 'Lỗi cập nhật hóa đơn' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Lỗi cập nhật hóa đơn';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useEffect, useState, useCallback } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import {
   LayoutDashboard,
   Package,
@@ -24,6 +24,7 @@ import {
   Beaker,
   Menu,
   X,
+  LogOut,
 } from 'lucide-react';
 
 const navGroups = [
@@ -76,6 +77,7 @@ const navGroups = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
   // Close sidebar on route change (mobile)
@@ -169,6 +171,22 @@ export default function Sidebar() {
             </div>
           ))}
         </nav>
+
+        {/* Logout */}
+        <div className="sidebar-footer">
+          <button
+            className="nav-item sidebar-logout-btn"
+            onClick={async () => {
+              if (!confirm('Bạn muốn đăng xuất?')) return;
+              await fetch('/api/auth/logout', { method: 'POST' });
+              router.push('/login');
+              router.refresh();
+            }}
+          >
+            <LogOut size={18} />
+            <span>Đăng xuất</span>
+          </button>
+        </div>
       </aside>
     </>
   );

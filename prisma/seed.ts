@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -52,6 +53,19 @@ async function main() {
     });
   }
   console.log('✅ Đã tạo cài đặt hệ thống');
+
+  // Tạo tài khoản admin mặc định
+  const hashedPassword = await bcrypt.hash('ankhangbmt', 12);
+  await prisma.user.upsert({
+    where: { username: 'admin' },
+    update: {},
+    create: {
+      username: 'admin',
+      password: hashedPassword,
+      role: 'admin',
+    },
+  });
+  console.log('✅ Đã tạo tài khoản admin (admin / ankhangbmt)');
 
   console.log('🎉 Hoàn tất tạo dữ liệu mặc định!');
 }

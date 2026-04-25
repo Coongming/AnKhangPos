@@ -397,3 +397,18 @@ model SystemSetting {
 
   @@map("system_settings")
 }
+
+// ============================================
+// TÀI KHOẢN ĐĂNG NHẬP
+// ============================================
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String   // bcrypt hash
+  role      String   @default("admin") // admin, staff (mở rộng sau)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}

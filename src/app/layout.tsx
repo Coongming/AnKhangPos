@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
-import Sidebar from '@/components/Sidebar';
+import AppShell from '@/components/AppShell';
 import { ToastProvider } from '@/components/Toast';
 
 export const viewport: Viewport = {
@@ -24,14 +24,9 @@ export default function RootLayout({
     <html lang="vi">
       <body>
         <ToastProvider>
-          <div className="app-layout">
-            <Sidebar />
-            <main className="main-content">
-              <div className="main-body">
-                {children}
-              </div>
-            </main>
-          </div>
+          <AppShell>
+            {children}
+          </AppShell>
         </ToastProvider>
         <script
           dangerouslySetInnerHTML={{
