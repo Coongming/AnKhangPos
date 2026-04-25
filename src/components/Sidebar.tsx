@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useEffect, useState, useCallback } from 'react';
 import {
   LayoutDashboard,
   Package,
@@ -21,6 +22,8 @@ import {
   Database,
   History,
   Beaker,
+  Menu,
+  X,
 } from 'lucide-react';
 
 const navGroups = [
@@ -73,40 +76,100 @@ const navGroups = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Close sidebar on route change (mobile)
+  useEffect(() => {
+    setIsOpen(false);
+  }, [pathname]);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, []);
+
+  // Prevent body scroll when sidebar is open on mobile
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => { document.body.style.overflow = ''; };
+  }, [isOpen]);
 
   return (
-    <aside className="sidebar">
-      <div className="sidebar-brand">
-        <div className="sidebar-brand-icon">AK</div>
-        <div>
-          <h1>An Khang</h1>
-          <p>Quản lý bán hàng</p>
+    <>
+      {/* Mobile Header Bar */}
+      <div className="mobile-header">
+        <button
+          className="mobile-menu-btn"
+          onClick={() => setIsOpen(true)}
+          aria-label="Mở menu"
+        >
+          <Menu size={24} />
+        </button>
+        <div className="mobile-header-brand">
+          <div className="sidebar-brand-icon" style={{ width: 32, height: 32, fontSize: 13 }}>AK</div>
+          <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-heading)' }}>An Khang</span>
         </div>
+        <div style={{ width: 40 }} /> {/* Spacer for centering */}
       </div>
-      <nav className="sidebar-nav">
-        {navGroups.map((group) => (
-          <div key={group.title} className="nav-group">
-            <div className="nav-group-title">{group.title}</div>
-            {group.items.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                item.href === '/'
-                  ? pathname === '/'
-                  : pathname.startsWith(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={`nav-item ${isActive ? 'active' : ''}`}
-                >
-                  <Icon />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
+
+      {/* Overlay */}
+      {isOpen && (
+        <div
+          className="sidebar-overlay"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
+        <div className="sidebar-brand">
+          <div className="sidebar-brand-icon">AK</div>
+          <div style={{ flex: 1 }}>
+            <h1>An Khang</h1>
+            <p>Quản lý bán hàng</p>
           </div>
-        ))}
-      </nav>
-    </aside>
+          {/* Close button - only visible on mobile */}
+          <button
+            className="sidebar-close-btn"
+            onClick={() => setIsOpen(false)}
+            aria-label="Đóng menu"
+          >
+            <X size={20} />
+          </button>
+        </div>
+        <nav className="sidebar-nav">
+          {navGroups.map((group) => (
+            <div key={group.title} className="nav-group">
+              <div className="nav-group-title">{group.title}</div>
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                const isActive =
+                  item.href === '/'
+                    ? pathname === '/'
+                    : pathname.startsWith(item.href);
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    className={`nav-item ${isActive ? 'active' : ''}`}
+                  >
+                    <Icon />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          ))}
+        </nav>
+      </aside>
+    </>
   );
 }

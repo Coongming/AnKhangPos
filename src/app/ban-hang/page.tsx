@@ -132,9 +132,9 @@ export default function SalesPage() {
   const payFull = () => setPaidAmount(String(totalAmount));
 
   return (
-    <div style={{ display: 'flex', gap: 20, height: 'calc(100vh - var(--header-height) - 48px)' }}>
+    <div className="sales-layout">
       {/* LEFT: Product Search + Cart */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div className="sales-products-panel">
         <div style={{ marginBottom: 16 }}>
           <h2 style={{ fontSize: 22, fontWeight: 800, color: 'var(--text-heading)', marginBottom: 8 }}>
             <ShoppingCart size={22} style={{ display: 'inline', marginRight: 8, verticalAlign: -3 }} />
@@ -225,7 +225,7 @@ export default function SalesPage() {
       </div>
 
       {/* RIGHT: Summary Panel */}
-      <div style={{ width: 340, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div className="sales-summary-panel">
         {/* Customer */}
         <div className="card" style={{ padding: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
